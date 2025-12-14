@@ -44,9 +44,35 @@ typedef struct avifCodecInternal
 static avifBool allocate_svt_buffers(EbBufferHeaderType ** input_buf);
 static avifResult dequeue_frame(avifCodec * codec, avifCodecEncodeOutput * output, avifBool done_sending_pics);
 
-static int svtQualityToQuantizer(int quality)
+// clang-format off
+static const int tuneIqQualityToCrfTimesFour[101] = {
+    252, 251, 249, 248, 247, 245, 243, 241, 239, 237,
+    235, 233, 231, 229, 227, 225, 223, 221, 219, 217,
+    215, 213, 211, 209, 207, 205, 203, 201, 199, 197,
+    195, 192, 190, 188, 185, 183, 180, 178, 176, 173,
+    171, 168, 166, 164, 161, 159, 156, 154, 152, 149,
+    147, 144, 142, 140, 137, 135, 132, 129, 126, 123,
+    120, 117, 114, 111, 108, 105, 102,  99,  96,  93,
+     90,  87,  84,  81,  78,  75,  72,  69,  66,  63,
+     60,  57,  54,  51,  48,  45,  42,  39,  36,  33,
+     30,  27,  24,  21,  18,  15,  12,   9,   6,   3,
+      0
+};
+// clang-format on
+
+static int svtQualityToQuantizer(int quality, avifBool isTuneIq, int * extendedCrfQindexOffset)
 {
-    const int quantizer = ((100 - quality) * 63 + 50) / 100;
+    int quantizer;
+
+    if (isTuneIq) {
+        int crfTimesFour = tuneIqQualityToCrfTimesFour[quality];
+
+        quantizer = crfTimesFour / 4;
+        *extendedCrfQindexOffset = crfTimesFour % 4;     
+    } else {
+        quantizer = ((100 - quality) * 63 + 50) / 100;
+        *extendedCrfQindexOffset = 0;
+    }
 
     return quantizer;
 }
@@ -187,7 +213,10 @@ static avifResult svtCodecEncodeImage(avifCodec * codec,
             svt_config->min_qp_allowed = AVIF_CLAMP(encoder->minQuantizer, 0, 62);
             svt_config->max_qp_allowed = AVIF_CLAMP(encoder->maxQuantizer, 0, 63);
         }
-        svt_config->qp = svtQualityToQuantizer(quality);
+
+        int extendedCrfQindexOffset = 0;
+        svt_config->qp = svtQualityToQuantizer(quality, AVIF_TRUE, &extendedCrfQindexOffset);
+        svt_config->extended_crf_qindex_offset = extendedCrfQindexOffset;
 
         if (tileRowsLog2 != 0) {
             svt_config->tile_rows = tileRowsLog2;
