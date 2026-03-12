@@ -993,6 +993,8 @@ static avifBool avifEncodeRestOfLayeredImage(avifEncoder * encoder,
             // reversed lerp, so that last layer reaches exact targetQuality
             encoder->quality = targetQuality - (targetQuality - PROGRESSIVE_START_QUALITY) *
                                                    (encoder->extraLayerCount - layerIndex) / encoder->extraLayerCount;
+            // Don't perform any scaling for the second layer (numerator: 1, denominator: 1).
+            encoder->scalingMode = scalingModeSettingsEntryOf(1, 1).value;
         } else {
             const avifInputFile * nextFile = avifInputGetFile(input, layerIndex);
             // main() function should set number of layers to number of input,
@@ -1160,8 +1162,10 @@ static avifBool avifEncodeImagesFixedQuality(const avifSettings * settings,
         // we should not reach here.
         assert(encoder->quality >= PROGRESSIVE_WORST_QUALITY);
         // Encode the base layer with a very low quality to ensure a small encoded size.
-        encoder->quality = 2;
+        encoder->quality = 10;
         // Low alpha quality resulted in weird artifact, so we don't do it.
+        // For further size savings, scale the first layer by a half (numerator: 1, denominator: 2).
+        encoder->scalingMode = scalingModeSettingsEntryOf(1, 2).value;
     }
 
     if (settings->layers > 1) {
